@@ -1,0 +1,54 @@
+
+name: Publish Docker Image
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+
+  push_to_registry:
+    name: Publish Docker Image To Github Container Registry
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+      attestations: write
+      id-token: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract Git tag for image tagging
+        id: get_tag
+        run: echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: . 
+          push: true
+          tags: |
+            ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.get_tag.outputs.TAG }}
+            ghcr.io/${{ env.IMAGE_NAME }}:latest
+          build-args: |
+            APP_VERSION=${{ steps.get_tag.outputs.TAG }}
+            GIT_COMMIT=${{ github.sha }}
+            BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
